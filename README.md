@@ -2,6 +2,7 @@
 
 [![codecov](https://codecov.io/gh/bogachevanton/randomness/branch/main/graph/badge.svg)](https://codecov.io/gh/bogachevanton/randomness)
 [![Tests](https://github.com/bogachevanton/randomness/actions/workflows/codecov.yml/badge.svg)](https://github.com/bogachevanton/randomness/actions/workflows/codecov.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 On-chain VRF-based random number generation for the Stacks blockchain.
 
@@ -221,4 +222,4 @@ settings/
 
 ## License
 
-MIT
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
