@@ -128,7 +128,7 @@
   (begin
     (asserts! (var-get requests-enabled) ERR-REQUESTS-DISABLED)
     (asserts! (is-mode-valid mode) ERR-INVALID-MODE)
-    (asserts! (is-eq tx-sender (contract-of operator)) ERR-INVALID-OPERATOR)
+    (asserts! (is-eq contract-caller (contract-of operator)) ERR-INVALID-OPERATOR)
     (asserts! (is-operator-allowed (contract-of operator)) ERR-INVALID-OPERATOR)
     (asserts! (is-requester-allowed contract-caller) ERR-REQUESTER-NOT-ALLOWED)
     (let
@@ -230,20 +230,13 @@
 (define-private (is-operator-allowed (operator principal))
   (default-to false (map-get? allowed-operators operator)))
 
-(define-private (buff32-to-u32 (src (buff 32)))
+(define-private (buff32-to-u128 (src (buff 32)))
   (let
     (
-      (b0 (buff-to-uint-be (unwrap-panic (as-max-len? (unwrap-panic (slice? src u0 u1)) u16))))
-      (b1 (buff-to-uint-be (unwrap-panic (as-max-len? (unwrap-panic (slice? src u1 u2)) u16))))
-      (b2 (buff-to-uint-be (unwrap-panic (as-max-len? (unwrap-panic (slice? src u2 u3)) u16))))
-      (b3 (buff-to-uint-be (unwrap-panic (as-max-len? (unwrap-panic (slice? src u3 u4)) u16))))
+      (first16 (unwrap! (slice? src u0 u16) ERR-INVALID-STATE))
+      (as16 (unwrap! (as-max-len? first16 u16) ERR-INVALID-STATE))
     )
-    (ok
-      (+ (* b0 u16777216)
-         (* b1 u65536)
-         (* b2 u256)
-         b3)
-    )
+    (ok (buff-to-uint-be as16))
   )
 )
 
@@ -263,11 +256,15 @@
     (
       (seed-height (try! (resolve-seed-height mode target-height)))
       (seed (unwrap! (get-tenure-info? vrf-seed seed-height) ERR-NO-VRF-SEED))
-      (h1 (sha512/256 (concat seed (unwrap-panic (to-consensus-buff? request-id)))))
-      (h2 (sha512/256 (concat h1 (unwrap-panic (to-consensus-buff? requested-at)))))
-      (h3 (sha512/256 (concat h2 (unwrap-panic (to-consensus-buff? target-height)))))
-      (h4 (sha512/256 (concat h3 (unwrap-panic (to-consensus-buff? mode)))))
+      (request-id-buff (unwrap! (to-consensus-buff? request-id) ERR-INVALID-STATE))
+      (requested-at-buff (unwrap! (to-consensus-buff? requested-at) ERR-INVALID-STATE))
+      (target-height-buff (unwrap! (to-consensus-buff? target-height) ERR-INVALID-STATE))
+      (mode-buff (unwrap! (to-consensus-buff? mode) ERR-INVALID-STATE))
+      (h1 (sha512/256 (concat seed request-id-buff)))
+      (h2 (sha512/256 (concat h1 requested-at-buff)))
+      (h3 (sha512/256 (concat h2 target-height-buff)))
+      (h4 (sha512/256 (concat h3 mode-buff)))
     )
-    (buff32-to-u32 h4)
+    (buff32-to-u128 h4)
   )
 )

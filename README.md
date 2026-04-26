@@ -108,8 +108,8 @@ User-facing operator. Wraps core calls, stores results, validates core address v
 | `get-last-request-id` | — | `(ok uint)` | Last request ID created through operator |
 | `get-last-random` | — | `(ok uint)` | Last received randomness value |
 | `get-rng-core` | — | `(ok principal)` | Current core contract address |
-| `get-result` | `uint` | `(ok {...})` / `(err u404)` | Result record for a request |
-| `get-result-in-range` | `uint, uint` | `(ok uint)` / `(err u404/u406/u407)` | `randomness mod max` |
+| `get-result` | `uint` | `(ok {...})` / `(err u502)` | Result record for a request |
+| `get-result-in-range` | `uint, uint` | `(ok uint)` / `(err u502/u504/u505)` | `randomness mod max` |
 
 #### Admin (owner-only)
 
@@ -133,12 +133,12 @@ User-facing operator. Wraps core calls, stores results, validates core address v
 | Code | Constant | Description |
 |---|---|---|
 | `u501` | `ERR-NOT-AUTHORIZED` | Caller is not the contract owner |
-| `u404` | `ERR-REQUEST-NOT-FOUND` | Request ID does not exist in results map |
-| `u405` | `ERR-ALREADY-RESOLVED` | Request already has randomness stored |
-| `u406` | `ERR-INVALID-STATE` | Randomness not yet resolved |
-| `u407` | `ERR-ZERO-MAX` | max=0 passed to range function |
-| `u408` | `ERR-INVALID-MODE` | Mode is not FAST or NEXT-TENURE |
-| `u410` | `ERR-INVALID-CORE` | Passed core contract doesn't match `rng-core` data-var |
+| `u502` | `ERR-REQUEST-NOT-FOUND` | Request ID does not exist in results map |
+| `u503` | `ERR-ALREADY-RESOLVED` | Request already has randomness stored |
+| `u504` | `ERR-INVALID-STATE` | Randomness not yet resolved |
+| `u505` | `ERR-ZERO-MAX` | max=0 passed to range function |
+| `u506` | `ERR-INVALID-MODE` | Mode is not FAST or NEXT-TENURE |
+| `u507` | `ERR-INVALID-CORE` | Passed core contract doesn't match `rng-core` data-var |
 
 ## Tests
 
