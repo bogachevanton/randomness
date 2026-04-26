@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { Cl } from "@stacks/transactions";
+import { Cl, cvToValue } from "@stacks/transactions";
+import { tx } from "@stacks/clarinet-sdk";
 
 const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!;
@@ -42,21 +43,21 @@ describe("rng-operator-v1 :: initial state", () => {
 describe("rng-operator-v1 :: read-only guards", () => {
   it("get-result returns err for unknown id", () => {
     const r = simnet.callReadOnlyFn(OPERATOR, "get-result", [Cl.uint(999)], deployer);
-    expect(r.result).toBeErr(Cl.uint(404));
+    expect(r.result).toBeErr(Cl.uint(502));
   });
 
   it("get-result-in-range rejects max=0", () => {
     const r = simnet.callReadOnlyFn(
       OPERATOR, "get-result-in-range", [Cl.uint(1), Cl.uint(0)], deployer
     );
-    expect(r.result).toBeErr(Cl.uint(407));
+    expect(r.result).toBeErr(Cl.uint(505));
   });
 
   it("get-result-in-range returns err for unknown id", () => {
     const r = simnet.callReadOnlyFn(
       OPERATOR, "get-result-in-range", [Cl.uint(999), Cl.uint(100)], deployer
     );
-    expect(r.result).toBeErr(Cl.uint(404));
+    expect(r.result).toBeErr(Cl.uint(502));
   });
 });
 
@@ -98,7 +99,7 @@ describe("rng-operator-v1 :: receive-randomness", () => {
       [Cl.uint(999), Cl.uint(42)],
       deployer
     );
-    expect(r.result).toBeErr(Cl.uint(404));
+    expect(r.result).toBeErr(Cl.uint(502));
   });
 });
 
@@ -121,7 +122,7 @@ describe("rng-operator-v1 :: request flow", () => {
       ],
       wallet1
     );
-    expect(r.result).toBeErr(Cl.uint(410));
+    expect(r.result).toBeErr(Cl.uint(507));
     // restore
     simnet.callPublicFn(
       OPERATOR, "set-rng-core",
@@ -139,11 +140,11 @@ describe("rng-operator-v1 :: request flow", () => {
       ],
       wallet1
     );
-    expect(r.result).toBeErr(Cl.uint(408));
+    expect(r.result).toBeErr(Cl.uint(506));
   });
 
   it("request-rng propagates core tx-sender check error", () => {
-    // Core rejects because tx-sender (wallet1) != .rng-operator-v1
+    // Core rejects because contract-caller (wallet1) != .rng-operator-v1
     const r = simnet.callPublicFn(
       OPERATOR, "request-rng",
       [
@@ -168,7 +169,7 @@ describe("rng-operator-v1 :: request flow", () => {
       ],
       wallet1
     );
-    expect(r.result).toBeErr(Cl.uint(410));
+    expect(r.result).toBeErr(Cl.uint(507));
     simnet.callPublicFn(
       OPERATOR, "set-rng-core",
       [Cl.contractPrincipal(deployer, CORE)], deployer
@@ -199,7 +200,7 @@ describe("rng-operator-v1 :: request flow", () => {
       ],
       wallet1
     );
-    expect(r.result).toBeErr(Cl.uint(410));
+    expect(r.result).toBeErr(Cl.uint(507));
     simnet.callPublicFn(
       OPERATOR, "set-rng-core",
       [Cl.contractPrincipal(deployer, CORE)], deployer
@@ -219,7 +220,7 @@ describe("rng-operator-v1 :: request flow", () => {
       ],
       wallet1
     );
-    expect(r.result).toBeErr(Cl.uint(410));
+    expect(r.result).toBeErr(Cl.uint(507));
     simnet.callPublicFn(
       OPERATOR, "set-rng-core",
       [Cl.contractPrincipal(deployer, CORE)], deployer
@@ -237,6 +238,180 @@ describe("rng-operator-v1 :: request flow", () => {
       wallet1
     );
     expect(r.result).toBeErr(Cl.uint(404));
+  });
+
+  it("e2e happy-path: request-rng-now resolves and stores randomness", () => {
+    const operatorPrincipal = Cl.contractPrincipal(deployer, OPERATOR);
+
+    // Prepare allowlists in core so operator can request on behalf of wallet1.
+    let r = simnet.callPublicFn(
+      CORE,
+      "set-operator-allowed",
+      [operatorPrincipal, Cl.bool(true)],
+      deployer
+    );
+    expect(r.result).toBeOk(Cl.bool(true));
+
+    r = simnet.callPublicFn(
+      CORE,
+      "set-requester-allowed",
+      [operatorPrincipal, Cl.bool(true)],
+      deployer
+    );
+    expect(r.result).toBeOk(Cl.bool(true));
+
+    const requestNow = simnet.callPublicFn(
+      OPERATOR,
+      "request-rng-now",
+      [Cl.contractPrincipal(deployer, CORE), operatorPrincipal],
+      wallet1
+    );
+    expect(requestNow.result).toBeOk(Cl.uint(1));
+
+    const requestId = BigInt((cvToValue(requestNow.result) as { value: string }).value);
+    const coreRandomness = simnet.callReadOnlyFn(
+      CORE,
+      "get-randomness",
+      [Cl.uint(requestId)],
+      deployer
+    );
+    const randomness = BigInt((cvToValue(coreRandomness.result) as { value: string }).value);
+    expect(randomness).toBeGreaterThan(4294967295n);
+
+    const result = simnet.callReadOnlyFn(
+      OPERATOR,
+      "get-result",
+      [Cl.uint(requestId)],
+      deployer
+    );
+
+    expect(result.result).toBeOk(
+      Cl.tuple({
+        requester: Cl.principal(wallet1),
+        resolved: Cl.bool(true),
+        randomness: Cl.some(Cl.uint(randomness)),
+      })
+    );
+  });
+
+  it("next-tenure timing: finalize in request block fails, next block succeeds", () => {
+    const operatorPrincipal = Cl.contractPrincipal(deployer, OPERATOR);
+
+    simnet.callPublicFn(
+      CORE,
+      "set-operator-allowed",
+      [operatorPrincipal, Cl.bool(true)],
+      deployer
+    );
+    simnet.callPublicFn(
+      CORE,
+      "set-requester-allowed",
+      [operatorPrincipal, Cl.bool(true)],
+      deployer
+    );
+
+    const sameBlock = simnet.mineBlock([
+      tx.callPublicFn(
+        OPERATOR,
+        "request-rng-next-tenure",
+        [Cl.contractPrincipal(deployer, CORE), operatorPrincipal],
+        wallet1
+      ),
+      tx.callPublicFn(
+        OPERATOR,
+        "finalize-request",
+        [Cl.uint(1), Cl.contractPrincipal(deployer, CORE), operatorPrincipal],
+        wallet1
+      ),
+    ]);
+
+    expect(sameBlock[0].result).toBeOk(Cl.uint(1));
+    expect(sameBlock[1].result).toBeErr(Cl.uint(410));
+
+    simnet.mineEmptyBlock();
+    const finalizeNextBlock = simnet.callPublicFn(
+      OPERATOR,
+      "finalize-request",
+      [Cl.uint(1), Cl.contractPrincipal(deployer, CORE), operatorPrincipal],
+      wallet1
+    );
+    const finalizedRandomness = BigInt(
+      (cvToValue(finalizeNextBlock.result) as { value: string }).value
+    );
+    expect(finalizedRandomness).toBeGreaterThan(0n);
+  });
+
+  it("two FAST requests in same block resolve to different randomness", () => {
+    const operatorPrincipal = Cl.contractPrincipal(deployer, OPERATOR);
+
+    simnet.callPublicFn(
+      CORE,
+      "set-operator-allowed",
+      [operatorPrincipal, Cl.bool(true)],
+      deployer
+    );
+    simnet.callPublicFn(
+      CORE,
+      "set-requester-allowed",
+      [operatorPrincipal, Cl.bool(true)],
+      deployer
+    );
+
+    const requested = simnet.mineBlock([
+      tx.callPublicFn(
+        OPERATOR,
+        "request-rng",
+        [Cl.contractPrincipal(deployer, CORE), operatorPrincipal, Cl.uint(1)],
+        wallet1
+      ),
+      tx.callPublicFn(
+        OPERATOR,
+        "request-rng",
+        [Cl.contractPrincipal(deployer, CORE), operatorPrincipal, Cl.uint(1)],
+        wallet2
+      ),
+    ]);
+
+    expect(requested[0].result).toBeOk(Cl.uint(1));
+    expect(requested[1].result).toBeOk(Cl.uint(2));
+
+    const finalized = simnet.mineBlock([
+      tx.callPublicFn(
+        OPERATOR,
+        "finalize-request",
+        [Cl.uint(1), Cl.contractPrincipal(deployer, CORE), operatorPrincipal],
+        wallet1
+      ),
+      tx.callPublicFn(
+        OPERATOR,
+        "finalize-request",
+        [Cl.uint(2), Cl.contractPrincipal(deployer, CORE), operatorPrincipal],
+        wallet2
+      ),
+    ]);
+
+    const finalizedRandomness1 = BigInt(
+      (cvToValue(finalized[0].result) as { value: string }).value
+    );
+    const finalizedRandomness2 = BigInt(
+      (cvToValue(finalized[1].result) as { value: string }).value
+    );
+    expect(finalizedRandomness1).toBeGreaterThan(0n);
+    expect(finalizedRandomness2).toBeGreaterThan(0n);
+
+    const result1 = simnet.callReadOnlyFn(OPERATOR, "get-result", [Cl.uint(1)], deployer);
+    const result2 = simnet.callReadOnlyFn(OPERATOR, "get-result", [Cl.uint(2)], deployer);
+
+    const parsed1 = cvToValue(result1.result) as {
+      value: { resolved: { value: boolean }; randomness: { value: { value: string } } };
+    };
+    const parsed2 = cvToValue(result2.result) as {
+      value: { resolved: { value: boolean }; randomness: { value: { value: string } } };
+    };
+
+    expect(parsed1.value.resolved.value).toBe(true);
+    expect(parsed2.value.resolved.value).toBe(true);
+    expect(parsed1.value.randomness.value.value).not.toBe(parsed2.value.randomness.value.value);
   });
 });
 

@@ -7,12 +7,12 @@
 
 ;; Constants and Errors
 (define-constant ERR-NOT-AUTHORIZED (err u501))
-(define-constant ERR-REQUEST-NOT-FOUND (err u404))
-(define-constant ERR-ALREADY-RESOLVED (err u405))
-(define-constant ERR-INVALID-STATE (err u406))
-(define-constant ERR-ZERO-MAX (err u407))
-(define-constant ERR-INVALID-MODE (err u408))
-(define-constant ERR-INVALID-CORE (err u410))
+(define-constant ERR-REQUEST-NOT-FOUND (err u502))
+(define-constant ERR-ALREADY-RESOLVED (err u503))
+(define-constant ERR-INVALID-STATE (err u504))
+(define-constant ERR-ZERO-MAX (err u505))
+(define-constant ERR-INVALID-MODE (err u506))
+(define-constant ERR-INVALID-CORE (err u507))
 (define-constant MODE-FAST u1)
 (define-constant MODE-NEXT-TENURE u2)
 
